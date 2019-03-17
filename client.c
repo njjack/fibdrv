@@ -4,6 +4,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <time.h>
 
 #define FIB_DEV "/dev/fibonacci"
 
@@ -16,6 +17,9 @@ int main()
     char write_buf[] = "testing writing";
     int offset = 100;  // TODO: test something bigger than the limit
     int i = 0;
+    long int ns;
+    struct timespec start, end;
+    FILE *ft = fopen("time", "w");
 
     fd = open(FIB_DEV, O_RDWR);
 
@@ -31,7 +35,11 @@ int main()
 
     for (i = 0; i <= offset; i++) {
         lseek(fd, i, SEEK_SET);
-        sz = read(fd, buf, 1);
+        clock_gettime(CLOCK_MONOTONIC, &start);
+        sz = read(fd, buf, 100);
+        clock_gettime(CLOCK_MONOTONIC, &end);
+        fprintf(ft, "%d %llu %lu \n", i, atoll(buf),
+                end.tv_nsec - start.tv_nsec);
         printf("Reading from " FIB_DEV
                " at offset %d, returned the sequence "
                "%lld.\n",
@@ -40,13 +48,13 @@ int main()
 
     for (i = offset; i >= 0; i--) {
         lseek(fd, i, SEEK_SET);
-        sz = read(fd, buf, 1);
+        sz = read(fd, buf, 100);
         printf("Reading from " FIB_DEV
                " at offset %d, returned the sequence "
                "%lld.\n",
                i, sz);
     }
-
+    close(ft);
     close(fd);
     return 0;
 }

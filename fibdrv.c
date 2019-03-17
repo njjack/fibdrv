@@ -6,6 +6,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/uaccess.h>
 
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_AUTHOR("National Cheng Kung University, Taiwan");
@@ -60,7 +61,17 @@ static ssize_t fib_read(struct file *file,
                         size_t size,
                         loff_t *offset)
 {
-    return (ssize_t) fib_sequence(*offset);
+    ktime_t start, end;
+    ssize_t fibval;
+    char tmpbuf[20];
+    start = ktime_get();
+    fibval = fib_sequence(*offset);
+    end = ktime_get();
+
+    sprintf(tmpbuf, "%llu", ktime_to_ns(ktime_sub(end, start)));
+    copy_to_user(buf, tmpbuf, 20);
+    return fibval;
+    // return (ssize_t) fib_sequence(*offset);
 }
 
 /* write operation is skipped */
