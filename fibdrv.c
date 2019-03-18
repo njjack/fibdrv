@@ -25,6 +25,32 @@ static struct cdev *fib_cdev;
 static struct class *fib_class;
 static DEFINE_MUTEX(fib_mutex);
 
+static long long fib_sequence_fb(long long n)  // Fast doubling
+{
+    if (n == 0)
+        return 0;
+    long long t0 = 1;  // F(n)
+    long long t1 = 1;  // F(n + 1)
+    long long t3 = 1;  // F(2n)
+    long long t4;      // F(2n+1)
+    int i = 1;
+    while (i < n) {
+        if ((i << 1) <= n) {
+            t4 = t1 * t1 + t0 * t0;
+            t3 = t0 * (2 * t1 - t0);
+            t0 = t3;
+            t1 = t4;
+            i = i << 1;
+        } else {
+            t0 = t3;
+            t3 = t4;
+            t4 = t0 + t4;
+            i++;
+        }
+    }
+    return t3;
+}
+
 static long long fib_sequence(long long k)
 {
     /* FIXME: use clz/ctz and fast algorithms to speed up */
@@ -65,7 +91,8 @@ static ssize_t fib_read(struct file *file,
     ssize_t fibval;
     char tmpbuf[20];
     start = ktime_get();
-    fibval = fib_sequence(*offset);
+    // fibval = fib_sequence(*offset);
+    fibval = fib_sequence_fb(*offset);
     end = ktime_get();
 
     sprintf(tmpbuf, "%llu", ktime_to_ns(ktime_sub(end, start)));
