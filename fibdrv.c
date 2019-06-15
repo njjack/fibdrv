@@ -7,7 +7,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/uaccess.h>
-#include <linux/slab.h>
+#include "big.h"
 
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_AUTHOR("National Cheng Kung University, Taiwan");
@@ -19,34 +19,37 @@ MODULE_VERSION("0.1");
 /* MAX_LENGTH is set to 92 because
  * ssize_t can't fit the number > 92
  */
-#define MAX_LENGTH 92
+#define MAX_LENGTH 100
 
 static dev_t fib_dev = 0;
 static struct cdev *fib_cdev;
 static struct class *fib_class;
 static DEFINE_MUTEX(fib_mutex);
-static const long long BASE = 100000000;  // = 10^8,bits per part = 7
 
-#define part_num 4
-typedef struct bigNum {
-    long long part[part_num];
-} bigNum;
-bigNum *big_add(bigNum a, bigNum b)
+void big_init(bigNum *a)
 {
-    bigNum *result = kmalloc(sizeof(bigNum), GFP_KERNEL);
+    for (int j = 0; j < part_num; j++)
+        a->part[j] = 0;
+}
+void big_assign(bigNum *a, bigNum *b)
+{
+    for (int i = 0; i < part_num; i++) {
+        a->part[i] = b->part[i];
+    }
+}
+void big_add(bigNum a, bigNum b, bigNum *result)
+{
     long long carry = 0;
     for (int i = 0; i < part_num; i++) {
         long long tmp = carry + a.part[i] + b.part[i];
         result->part[i] = tmp % BASE;
         carry = tmp / BASE;
     }
-    return result;
 }
 
 
-bigNum *big_mul(bigNum a, bigNum b)
+void big_mul(bigNum a, bigNum b, bigNum *result)
 {
-    bigNum *result = kmalloc(sizeof(bigNum), GFP_KERNEL);
     for (int i = 0; i < part_num; i++) {
         result->part[i] = 0;
     }
@@ -185,19 +188,17 @@ static long long fib_sequence_fd(long long n)  // Fast doubling
     return t3;
 }
 
-static long long fib_sequence(long long k)
+static void fib_sequence(long long k, bigNum *result)
 {
-    /* FIXME: use clz/ctz and fast algorithms to speed up */
-    long long f[k + 2];
-
-    f[0] = 0;
-    f[1] = 1;
-
+    bigNum f[k + 2];
+    big_init(&f[0]);
+    big_init(&f[1]);
+    f[1].part[0] = 1;
     for (int i = 2; i <= k; i++) {
-        f[i] = f[i - 1] + f[i - 2];
+        big_init(&f[i]);
+        big_add(f[i - 2], f[i - 1], &f[i]);
     }
-
-    return f[k];
+    big_assign(result, &f[k]);
 }
 
 static int fib_open(struct inode *inode, struct file *file)
@@ -222,17 +223,21 @@ static ssize_t fib_read(struct file *file,
                         loff_t *offset)
 {
     ktime_t start, end;
-    ssize_t fibval;
-    char tmpbuf[20];
+    bigNum result;
     start = ktime_get();
-    // fibval = fib_sequence(*offset);
-    fibval = fib_sequence_fd_clz(*offset);
+    for (int j = 0; j < part_num; j++) {
+        result.part[j] = 0;
+    }
+    fib_sequence(*offset, &result);
+
     end = ktime_get();
 
-    sprintf(tmpbuf, "%llu", ktime_to_ns(ktime_sub(end, start)));
-    copy_to_user(buf, tmpbuf, 20);
-    return fibval;
-    // return (ssize_t) fib_sequence(*offset);
+
+
+    // sprintf(tmpbuf, "%llu", ktime_to_ns(ktime_sub(end, start)));
+    copy_to_user(buf, &result, size);
+
+    return 1;
 }
 
 /* write operation is skipped */

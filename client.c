@@ -5,15 +5,31 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <time.h>
+#include "big.h"
 
 #define FIB_DEV "/dev/fibonacci"
+void big_print(bigNum buf)
+{
+    int i = part_num - 1;
+    while ((i >= 0) && (buf.part[i] == 0))
+        i--;
+    if (i < 0) {
+        printf("0");
+        return;
+    }
+    printf("%lld", buf.part[i--]);
+    while (i >= 0) {
+        printf("%08lld", buf.part[i]);
+        i--;
+    }
+}
 
 int main()
 {
     int fd;
     long long sz;
 
-    char buf[1];
+    bigNum buf;
     char write_buf[] = "testing writing";
     int offset = 100;  // TODO: test something bigger than the limit
     int i = 0;
@@ -34,25 +50,27 @@ int main()
     }
 
     for (i = 0; i <= offset; i++) {
+        for (int j = 0; j < part_num; j++) {
+            buf.part[j] = 0;
+        }
         lseek(fd, i, SEEK_SET);
         clock_gettime(CLOCK_MONOTONIC, &start);
-        sz = read(fd, buf, 100);
+        sz = read(fd, &buf, sizeof(bigNum));
         clock_gettime(CLOCK_MONOTONIC, &end);
-        fprintf(ft, "%d %llu %lu \n", i, atoll(buf),
-                end.tv_nsec - start.tv_nsec);
-        printf("Reading from " FIB_DEV
-               " at offset %d, returned the sequence "
-               "%lld.\n",
-               i, sz);
+
+        printf("Reading from " FIB_DEV " at offset %d, returned the sequence ",
+               i);
+        big_print(buf);
+        printf(".\n");
     }
 
     for (i = offset; i >= 0; i--) {
         lseek(fd, i, SEEK_SET);
-        sz = read(fd, buf, 100);
-        printf("Reading from " FIB_DEV
-               " at offset %d, returned the sequence "
-               "%lld.\n",
-               i, sz);
+        sz = read(fd, &buf, sizeof(bigNum));
+        printf("Reading from " FIB_DEV " at offset %d, returned the sequence ",
+               i);
+        big_print(buf);
+        printf(".\n");
     }
     close(ft);
     close(fd);
