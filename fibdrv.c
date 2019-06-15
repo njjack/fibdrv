@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/uaccess.h>
+#include <linux/slab.h>
 
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_AUTHOR("National Cheng Kung University, Taiwan");
@@ -24,6 +25,41 @@ static dev_t fib_dev = 0;
 static struct cdev *fib_cdev;
 static struct class *fib_class;
 static DEFINE_MUTEX(fib_mutex);
+static const long long BASE = 100000000;  // = 10^8,bits per part = 7
+
+#define part_num 4
+typedef struct bigNum {
+    long long part[part_num];
+} bigNum;
+bigNum *big_add(bigNum a, bigNum b)
+{
+    bigNum *result = kmalloc(sizeof(bigNum), GFP_KERNEL);
+    long long carry = 0;
+    for (int i = 0; i < part_num; i++) {
+        long long tmp = carry + a.part[i] + b.part[i];
+        result->part[i] = tmp % BASE;
+        carry = tmp / BASE;
+    }
+    return result;
+}
+
+
+bigNum *mul(bigNum a, bigNum b)
+{
+    bigNum *result = kmalloc(sizeof(bigNum), GFP_KERNEL);
+    for (int i = 0; i < part_num; i++) {
+        result->part[i] = 0;
+    }
+    for (int i = 0; i < part_num; i++) {
+        long long carry = 0;
+        for (int j = 0; i + j < part_num; j++) {
+            long long tmp = a.part[i] * b.part[j] + carry + result->part[i + j];
+            result->part[i + j] = tmp % BASE;
+            carry = tmp / BASE;
+        }
+    }
+    return result;
+}
 
 static void matrix_mult(long long m[2][2], long long n[2][2])
 {
