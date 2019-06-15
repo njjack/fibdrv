@@ -44,7 +44,7 @@ bigNum *big_add(bigNum a, bigNum b)
 }
 
 
-bigNum *mul(bigNum a, bigNum b)
+bigNum *big_mul(bigNum a, bigNum b)
 {
     bigNum *result = kmalloc(sizeof(bigNum), GFP_KERNEL);
     for (int i = 0; i < part_num; i++) {
@@ -101,8 +101,65 @@ static long long fib_sequence_qmatrix(long long k)  // qmatrix
     }
     return fn[0][1];
 }
+static unsigned long long fib_sequence_fd_clz(unsigned long long k)
+{
+    /* FIXME: use clz/ctz and fast algorithms to speed up */
+    if (k == 0)
+        return 0;
 
-static long long fib_sequence_fb(long long n)  // Fast doubling
+    int n = 0;
+    unsigned long long clz = k;
+
+    if (clz <= 0x00000000FFFFFFFF) {
+        n += 32;
+        clz <<= 32;
+    }
+    if (clz <= 0x0000FFFFFFFFFFFF) {
+        n += 16;
+        clz <<= 16;
+    }
+    if (clz <= 0x00FFFFFFFFFFFFFF) {
+        n += 8;
+        clz <<= 8;
+    }
+    if (clz <= 0x0FFFFFFFFFFFFFFF) {
+        n += 4;
+        clz <<= 4;
+    }
+    if (clz <= 0x3FFFFFFFFFFFFFFF) {
+        n += 2;
+        clz <<= 2;
+    }
+    if (clz <= 0x7FFFFFFFFFFFFFFF) {
+        n += 1;
+        clz <<= 1;
+    }
+
+    k <<= n;
+    n = 64 - n;
+
+    unsigned long long fn = 0;
+    unsigned long long fn1 = 1;
+    unsigned long long f2n = 0;
+    unsigned long long f2n1 = 0;
+
+    int i;
+    for (i = 0; i < n; i++) {
+        f2n1 = fn1 * fn1 + fn * fn;
+        f2n = fn * (2 * fn1 - fn);
+        if (k & 0x8000000000000000) {
+            fn = f2n1;
+            fn1 = f2n + f2n1;
+        } else {
+            fn = f2n;
+            fn1 = f2n1;
+        }
+        k <<= 1;
+    }
+
+    return fn;
+}
+static long long fib_sequence_fd(long long n)  // Fast doubling
 {
     if (n == 0)
         return 0;
@@ -169,7 +226,7 @@ static ssize_t fib_read(struct file *file,
     char tmpbuf[20];
     start = ktime_get();
     // fibval = fib_sequence(*offset);
-    fibval = fib_sequence_qmatrix(*offset);
+    fibval = fib_sequence_fd_clz(*offset);
     end = ktime_get();
 
     sprintf(tmpbuf, "%llu", ktime_to_ns(ktime_sub(end, start)));
