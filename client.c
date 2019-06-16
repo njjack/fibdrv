@@ -19,7 +19,7 @@ void big_print(bigNum buf)
     }
     printf("%lld", buf.part[i--]);
     while (i >= 0) {
-        printf("%08lld", buf.part[i]);
+        printf("%010lld", buf.part[i]);
         i--;
     }
 }

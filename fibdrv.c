@@ -111,7 +111,8 @@ static long long fib_sequence_qmatrix(long long k)  // qmatrix
     }
     return fn[0][1];
 }
-static unsigned long long fib_sequence_fd_clz(unsigned long long k)
+static unsigned long long fib_sequence_fd_clz(unsigned long long k,
+                                              bigNum *result)
 {
     /* FIXME: use clz/ctz and fast algorithms to speed up */
     if (k == 0)
@@ -148,28 +149,32 @@ static unsigned long long fib_sequence_fd_clz(unsigned long long k)
     k <<= n;
     n = 64 - n;
 
-    unsigned long long fn = 0;
-    unsigned long long fn1 = 1;
-    unsigned long long f2n = 0;
-    unsigned long long f2n1 = 0;
-
+    bigNum f[7];  // 0:fn 1:fn1 2:f2n 3:f2n1 4:tmp 5:tmp 6:2
+    for (int i = 0; i < 7; i++) {
+        memset(&f[i], 0, sizeof(bigNum));
+    }
+    f[1].part[0] = 1;
+    f[6].part[0] = 2;
     int i;
     for (i = 0; i < n; i++) {
-        f2n1 = fn1 * fn1 + fn * fn;
-        f2n = fn * (2 * fn1 - fn);
+        big_mul(f[0], f[0], &f[4]);  // f2n1 = fn1 * fn1 + fn * fn;
+        big_mul(f[1], f[1], &f[5]);
+        big_add(f[4], f[5], &f[3]);
+        big_mul(f[6], f[1], &f[4]);  // f2n = fn * (2 * fn1 - fn)
+        big_sub(f[4], f[0], &f[5]);
+        big_mul(f[0], f[5], &f[2]);
         if (k & 0x8000000000000000) {
-            fn = f2n1;
-            fn1 = f2n + f2n1;
+            big_assign(&f[0], &f[3]);    // fn = f2n1
+            big_add(f[2], f[3], &f[1]);  // fn1 = f2n + f2n1;
         } else {
-            fn = f2n;
-            fn1 = f2n1;
+            big_assign(&f[0], &f[2]);  // fn = f2n
+            big_assign(&f[1], &f[3]);  // fn1 = f2n1
         }
         k <<= 1;
     }
-
-    return fn;
+    big_assign(result, &f[0]);
 }
-static long long fib_sequence_fd(long long n, bigNum *result)  // Fast doubling
+static void fib_sequence_fd(long long n, bigNum *result)  // Fast doubling
 {
     if (n == 0)
         return 0;
@@ -201,26 +206,6 @@ static long long fib_sequence_fd(long long n, bigNum *result)  // Fast doubling
         }
     }
     big_assign(result, &t[2]);
-    /*   long long t0 = 1;  // F(n)
-       long long t1 = 1;  // F(n + 1)
-       long long t3 = 1;  // F(2n)
-       long long t4;      // F(2n+1)
-       int i = 1;
-       while (i < n) {
-           if ((i << 1) <= n) {
-               t4 = t1 * t1 + t0 * t0;
-               t3 = t0 * (2 * t1 - t0);
-               t0 = t3;
-               t1 = t4;
-               i = i << 1;
-           } else {
-               t0 = t3;
-               t3 = t4;
-               t4 = t0 + t4;
-               i++;
-           }
-       }*/
-    // return t3;
 }
 
 static void fib_sequence(long long k, bigNum *result)
@@ -262,7 +247,7 @@ static ssize_t fib_read(struct file *file,
     for (int j = 0; j < part_num; j++) {
         result.part[j] = 0;
     }
-    fib_sequence_fd(*offset, &result);
+    fib_sequence_fd_clz(*offset, &result);
 
     end = ktime_get();
 
