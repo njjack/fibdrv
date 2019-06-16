@@ -19,18 +19,13 @@ MODULE_VERSION("0.1");
 /* MAX_LENGTH is set to 92 because
  * ssize_t can't fit the number > 92
  */
-#define MAX_LENGTH 100
+#define MAX_LENGTH 92
 
 static dev_t fib_dev = 0;
 static struct cdev *fib_cdev;
 static struct class *fib_class;
 static DEFINE_MUTEX(fib_mutex);
 
-void big_init(bigNum *a)
-{
-    for (int j = 0; j < part_num; j++)
-        a->part[j] = 0;
-}
 void big_assign(bigNum *a, bigNum *b)
 {
     for (int i = 0; i < part_num; i++) {
@@ -39,6 +34,7 @@ void big_assign(bigNum *a, bigNum *b)
 }
 void big_add(bigNum a, bigNum b, bigNum *result)
 {
+    memset(result, 0, sizeof(bigNum));
     long long carry = 0;
     for (int i = 0; i < part_num; i++) {
         long long tmp = carry + a.part[i] + b.part[i];
@@ -47,9 +43,21 @@ void big_add(bigNum a, bigNum b, bigNum *result)
     }
 }
 
+void big_sub(bigNum a, bigNum b, bigNum *result)
+{
+    memset(result, 0, sizeof(bigNum));
+    for (int i = 0; i < part_num; i++) {
+        result->part[i] = a.part[i] - b.part[i];
+        if (result->part[i] < 0) {
+            result->part[i] += BASE;
+            result->part[i + 1]--;
+        }
+    }
+}
 
 void big_mul(bigNum a, bigNum b, bigNum *result)
 {
+    memset(result, 0, sizeof(bigNum));
     for (int i = 0; i < part_num; i++) {
         result->part[i] = 0;
     }
@@ -61,7 +69,6 @@ void big_mul(bigNum a, bigNum b, bigNum *result)
             carry = tmp / BASE;
         }
     }
-    return result;
 }
 
 static void matrix_mult(long long m[2][2], long long n[2][2])
@@ -162,40 +169,67 @@ static unsigned long long fib_sequence_fd_clz(unsigned long long k)
 
     return fn;
 }
-static long long fib_sequence_fd(long long n)  // Fast doubling
+static long long fib_sequence_fd(long long n, bigNum *result)  // Fast doubling
 {
     if (n == 0)
         return 0;
-    long long t0 = 1;  // F(n)
-    long long t1 = 1;  // F(n + 1)
-    long long t3 = 1;  // F(2n)
-    long long t4;      // F(2n+1)
+    bigNum t[7];  // 0:F(n) 1:F(n + 1) 2: F(2n) 3:F(2n+1) 4:tmp 5:tmp 6:2
+    for (int i = 0; i < 7; i++) {
+        memset(&t[i], 0, sizeof(bigNum));
+    }
+    t[0].part[0] = t[1].part[0] = t[2].part[0] = 1;
+    t[6].part[0] = 2;
     int i = 1;
     while (i < n) {
         if ((i << 1) <= n) {
-            t4 = t1 * t1 + t0 * t0;
-            t3 = t0 * (2 * t1 - t0);
-            t0 = t3;
-            t1 = t4;
+            big_mul(t[1], t[1], &t[4]);  // t4 = t1 * t1 + t0 * t0;
+            big_mul(t[0], t[0], &t[5]);
+            big_add(t[4], t[5], &t[3]);
+
+            big_mul(t[6], t[1], &t[5]);  // t3 = t0 * (2 * t1 - t0);
+            big_sub(t[5], t[0], &t[4]);
+            big_mul(t[0], t[4], &t[2]);
+            big_assign(&t[0], &t[2]);  // t0 = t3
+            big_assign(&t[1], &t[3]);  // t1 = t4
             i = i << 1;
         } else {
-            t0 = t3;
-            t3 = t4;
-            t4 = t0 + t4;
+            big_assign(&t[0], &t[2]);    // t0 = t3
+            big_assign(&t[2], &t[3]);    // t3 = t4
+            big_add(t[0], t[3], &t[4]);  // t4 = t0 + t4;
+            big_assign(&t[3], &t[4]);
             i++;
         }
     }
-    return t3;
+    big_assign(result, &t[2]);
+    /*   long long t0 = 1;  // F(n)
+       long long t1 = 1;  // F(n + 1)
+       long long t3 = 1;  // F(2n)
+       long long t4;      // F(2n+1)
+       int i = 1;
+       while (i < n) {
+           if ((i << 1) <= n) {
+               t4 = t1 * t1 + t0 * t0;
+               t3 = t0 * (2 * t1 - t0);
+               t0 = t3;
+               t1 = t4;
+               i = i << 1;
+           } else {
+               t0 = t3;
+               t3 = t4;
+               t4 = t0 + t4;
+               i++;
+           }
+       }*/
+    // return t3;
 }
 
 static void fib_sequence(long long k, bigNum *result)
 {
     bigNum f[k + 2];
-    big_init(&f[0]);
-    big_init(&f[1]);
+    memset(&f[0], 0, sizeof(bigNum));
+    memset(&f[1], 0, sizeof(bigNum));
     f[1].part[0] = 1;
     for (int i = 2; i <= k; i++) {
-        big_init(&f[i]);
         big_add(f[i - 2], f[i - 1], &f[i]);
     }
     big_assign(result, &f[k]);
@@ -228,7 +262,7 @@ static ssize_t fib_read(struct file *file,
     for (int j = 0; j < part_num; j++) {
         result.part[j] = 0;
     }
-    fib_sequence(*offset, &result);
+    fib_sequence_fd(*offset, &result);
 
     end = ktime_get();
 

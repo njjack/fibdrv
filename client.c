@@ -50,9 +50,7 @@ int main()
     }
 
     for (i = 0; i <= offset; i++) {
-        for (int j = 0; j < part_num; j++) {
-            buf.part[j] = 0;
-        }
+        memset(&buf, 0, sizeof(bigNum));
         lseek(fd, i, SEEK_SET);
         clock_gettime(CLOCK_MONOTONIC, &start);
         sz = read(fd, &buf, sizeof(bigNum));
@@ -66,6 +64,7 @@ int main()
 
     for (i = offset; i >= 0; i--) {
         lseek(fd, i, SEEK_SET);
+        memset(&buf, 0, sizeof(bigNum));
         sz = read(fd, &buf, sizeof(bigNum));
         printf("Reading from " FIB_DEV " at offset %d, returned the sequence ",
                i);
