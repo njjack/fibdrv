@@ -19,7 +19,7 @@ MODULE_VERSION("0.1");
 /* MAX_LENGTH is set to 92 because
  * ssize_t can't fit the number > 92
  */
-#define MAX_LENGTH 92
+#define MAX_LENGTH 100
 
 static dev_t fib_dev = 0;
 static struct cdev *fib_cdev;
@@ -45,9 +45,9 @@ void big_add(bigNum a, bigNum b, bigNum *result)
 
 void big_sub(bigNum a, bigNum b, bigNum *result)
 {
-    memset(result, 0, sizeof(bigNum));
+    big_assign(result, &a);
     for (int i = 0; i < part_num; i++) {
-        result->part[i] = a.part[i] - b.part[i];
+        result->part[i] -= b.part[i];
         if (result->part[i] < 0) {
             result->part[i] += BASE;
             result->part[i + 1]--;
